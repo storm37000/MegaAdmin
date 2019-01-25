@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.27428.2037
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MegaAdmin", "MegaAdmin\MegaAdmin.csproj", "{080888AE-0408-4AB5-B29B-D43242879321}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{080888AE-0408-4AB5-B29B-D43242879321}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{080888AE-0408-4AB5-B29B-D43242879321}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{080888AE-0408-4AB5-B29B-D43242879321}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{080888AE-0408-4AB5-B29B-D43242879321}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {347326C1-FD4E-47EB-AC84-EF3A53AA8095}
+	EndGlobalSection
+EndGlobal
