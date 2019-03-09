@@ -17,7 +17,7 @@ namespace MegaAdmin
 			FileSystemWatcher watcher = new FileSystemWatcher("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + server.SID, "sl*.mapi");
 			watcher.IncludeSubdirectories = false;
 
-			//if (Program.RunningPlatform() == Program.Platform.Linux)
+			//if (Program.platform == Program.Platform.Linux)
 			//{
 				ReadLinux(server, watcher);
 			//}

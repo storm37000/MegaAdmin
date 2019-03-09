@@ -11,10 +11,12 @@ namespace MegaAdmin
 		private static byte offset = 0;
 		public static List<Server> servers = new List<Server>();
 		public static string buffclear = string.Empty;
+		public static Platform platform;
 
 		static void Main(string[] args)
 		{
 			AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnProcessExit);
+			platform = RunningPlatform();
 			for (ushort x = 0; x < Console.WindowTop + Console.WindowHeight - 3; x++)
 			{
 				for (ushort i = 0; i < Console.WindowWidth-1; i++)

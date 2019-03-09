@@ -2,23 +2,23 @@
 {
 	public static class Color
 	{
-		public static string Black = "\u001b[30m";
+		public static string Black { get { if (Program.platform == Program.Platform.Windows) { return ""; } else { return "\u001b[30m"; } } }
 
-		public static string DarkRed = "\u001b[31m";
+		public static string DarkRed { get { if (Program.platform == Program.Platform.Windows) { return ""; } else { return "\u001b[31m"; } } }
 
-		public static string DarkGreen = "\u001b[32m";
+		public static string DarkGreen { get { if (Program.platform == Program.Platform.Windows) { return ""; } else { return "\u001b[32m"; } } }
 
-		public static string DarkYellow = "\u001b[33m";
+		public static string DarkYellow { get { if (Program.platform == Program.Platform.Windows) { return ""; } else { return "\u001b[33m"; } } }
 
-		public static string DarkBlue = "\u001b[34m";
+		public static string DarkBlue { get { if (Program.platform == Program.Platform.Windows) { return ""; } else { return "\u001b[34m"; } } }
 
-		public static string DarkMagenta = "\u001b[35m";
+		public static string DarkMagenta { get { if (Program.platform == Program.Platform.Windows) { return ""; } else { return "\u001b[35m"; } } }
 
-		public static string DarkCyan = "\u001b[36m";
+		public static string DarkCyan { get { if (Program.platform == Program.Platform.Windows) { return ""; } else { return "\u001b[36m"; } } }
 
-		public static string White = "\u001b[37m";
+		public static string White { get { if (Program.platform == Program.Platform.Windows) { return ""; } else { return "\u001b[37m"; } } }
 
-		public static string Gray = White;
+		public static string Gray { get { if (Program.platform == Program.Platform.Windows) { return ""; } else { return White; } } }
 
 		public static string Red = DarkRed; //"\u001b[31m;1m";
 
@@ -34,6 +34,6 @@
 
 		//public static string BrightWhite = "\u001b[37m;1m";
 
-		public static string Reset = "\u001b[0m";
+		public static string Reset { get { if (Program.platform == Program.Platform.Windows) { return ""; } else { return "\u001b[0m"; } } }
 	}
 }
