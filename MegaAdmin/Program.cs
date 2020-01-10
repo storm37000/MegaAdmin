@@ -89,11 +89,8 @@ namespace MegaAdmin
 							break;
 					}
 				//}
+				//if (servers.Count == 0) { break; }
 			}
-		}
-		public static byte ClampB(byte value, byte min, byte max)
-		{
-			return (value < min) ? min : (value > max) ? max : value;
 		}
 		public static int ClampI(int value, int min, int max)
 		{
@@ -130,15 +127,12 @@ namespace MegaAdmin
 		}
 		public static void stopServer(Server server)
 		{
-			if (servers.Count > 1)
+			servers.Remove(server);
+			if (servers.Count > 0)
 			{
-				if (selected != 0)
-				{
-					selected--;
-				}
-				servers.Remove(server);
-				WriteBuffer(servers[selected]);
+				selected--;
 				WriteMenu();
+				WriteBuffer(servers[selected]);
 			}
 			else
 			{
@@ -186,17 +180,17 @@ namespace MegaAdmin
 		{
 			WriteInput();
 			int maxw = Console.BufferWidth;
-			if (offset < servers.Count && selected == maxw / 19)
-			{
-				offset++;
-			}else if (offset > 0 && selected == offset*19)
-			{
-				offset--;
-			}
+//			if (offset < servers.Count && selected == maxw / 19)
+//			{
+//				offset++;
+//			}else if (offset > 0 && selected == offset*19)
+//			{
+//				offset--;
+//			}
 			Console.SetCursorPosition(0, Console.WindowTop + Console.WindowHeight - 1);
 			ClearLine();
 			Console.SetCursorPosition(0, Console.WindowTop + Console.WindowHeight - 1);
-			for (byte i = offset; i < ClampB((byte)((maxw/19)+offset),0,(byte)servers.Count); i++)
+			for (byte i = offset; i < ClampI((maxw/19)+offset,0,servers.Count); i++)
 			{
 				if (i == selected)
 				{
@@ -212,9 +206,9 @@ namespace MegaAdmin
 
 		static void OnProcessExit(object sender, EventArgs e)
 		{
-			foreach (Server server in servers)
+			for (byte i = (byte)servers.Count;i==1;i--)
 			{
-				server.Stop();
+				servers[i].Stop();
 			}
 		}
 

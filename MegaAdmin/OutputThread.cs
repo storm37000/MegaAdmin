@@ -1,4 +1,4 @@
-﻿using System;//why is a bullet here?
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -14,6 +14,10 @@ namespace MegaAdmin
 
 		public OutputThread(Server server)
 		{
+			while (!Directory.Exists("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + server.SID))
+			{
+				//wait for directory to be created...
+			}
 			FileSystemWatcher watcher = new FileSystemWatcher("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + server.SID, "sl*.mapi");
 			watcher.IncludeSubdirectories = false;
 

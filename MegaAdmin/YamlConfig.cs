@@ -11,6 +11,10 @@ namespace MegaAdmin
 
 		public YamlConfig(string path)
 		{
+			if (!File.Exists(path))
+			{
+				File.Create(path).Close();
+			}
 			if (File.Exists(path))
 			{
 				LoadConfigFile(path);

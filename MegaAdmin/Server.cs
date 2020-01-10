@@ -35,7 +35,6 @@ namespace MegaAdmin
 		public YamlConfig Config { get; private set; }
 
 		// set via config files
-		public bool multiMode { get; private set; }
 		public bool nolog { get; private set; }
 		// 
 
@@ -44,21 +43,11 @@ namespace MegaAdmin
 		{
 			get
 			{
-				string loc = String.Empty;
-				if (multiMode)
-				{
-					loc = AppFolder + "servers" + Path.DirectorySeparatorChar + ConfigKey + Path.DirectorySeparatorChar + "logs" + Path.DirectorySeparatorChar;
-				}
-				else
-				{
-					loc = AppFolder + "logs" + Path.DirectorySeparatorChar + Port + Path.DirectorySeparatorChar;
-				}
-
+				string loc = AppFolder + "ServerLogs" + Path.DirectorySeparatorChar + Port + Path.DirectorySeparatorChar;
 				if (!Directory.Exists(loc))
 				{
 					Directory.CreateDirectory(loc);
 				}
-
 				return loc;
 			}
 		}
@@ -94,6 +83,7 @@ namespace MegaAdmin
 			this.ConfigKey = cfgkey;
 			new Feature_Loader("MeA_features",this);
 			Reload();
+			printerThread = new Thread(new ThreadStart(() => new OutputThread(this)));
 			Start();
 		}
 
@@ -128,63 +118,61 @@ namespace MegaAdmin
 			SID = Program.GenerateSessionID();
 			this.write("starting server with session ID: " + SID, Color.Yellow);
 			InitialRoundStarted = false;
-			try
+			string[] files = Directory.GetFiles(Directory.GetCurrentDirectory(), "SCPSL.*", SearchOption.TopDirectoryOnly);
+			if (files.Length == 0)
 			{
-				string[] files = Directory.GetFiles(Directory.GetCurrentDirectory(), "SCPSL.*", SearchOption.TopDirectoryOnly);
-				write("Executing: " + files[0], Color.DarkGreen);
-				string args;
-				if (true) //nolog
+				write("Failed - couldnt find server executable file!", Color.Red);
+				write("Please run the 'restart' command to try again...", Color.Gray);
+				return;
+			}
+			string args;
+			if (true) //nolog
+			{
+				if (Program.RunningPlatform() != Program.Platform.Windows)
 				{
-					if (Program.RunningPlatform() != Program.Platform.Windows)
-					{
-						args = "-batchmode -nographics -nolog -key" + SID + " -silent-crashes -id" + (object)Process.GetCurrentProcess().Id + " -logFile /dev/null";
-					}
-					else
-					{
-						args = "-batchmode -nographics -nolog -key" + SID + " -silent-crashes -id" + (object)Process.GetCurrentProcess().Id + " -logFile NUL";
-					}
+					args = "-batchmode -nographics -nolog -key" + SID + " -silent-crashes -id" + (object)Process.GetCurrentProcess().Id + " -logFile /dev/null";
 				}
 				else
 				{
-					args = "-batchmode -nographics -key" + SID + " -silent-crashes -id" + (object)Process.GetCurrentProcess().Id + " -logFile \"" + LogFolder + "SCP_output_log.txt" + "\"";
+					args = "-batchmode -nographics -nolog -key" + SID + " -silent-crashes -id" + (object)Process.GetCurrentProcess().Id + " -logFile NUL";
 				}
-				write("Starting server with the following parameters", Color.Yellow);
+			}
+			else
+			{
+				args = "-batchmode -nographics -key" + SID + " -silent-crashes -id" + (object)Process.GetCurrentProcess().Id + " -logFile \"" + LogFolder + "SCP_output_log.txt" + "\"";
+			}
+			write("Starting server with the following parameters", Color.Yellow);
+			try
+			{
 				write(files[0] + " " + args, Color.Yellow);
 				ProcessStartInfo startInfo = new ProcessStartInfo(files[0]);
 				startInfo.Arguments = args;
 				GameProcess = Process.Start(startInfo);
-				foreach (IEventServerPreStart Event in preserverstart)
-				{
-					Event.OnServerPreStart();
-				}
 			}
 			catch (Exception e)
 			{
-				write("Failed - Executable file not found or config issue!", Color.Red);
+				write("Failed - Executable file or config issue!", Color.Red);
 				write(e.Message, Color.Red);
 				write("Please run the 'restart' command to try again...", Color.Gray);
-				Stop();
 				return;
 			}
-			while (!Directory.Exists("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID))
+			foreach (IEventServerPreStart Event in preserverstart)
 			{
-				//wait for directory to be created...
+				Event.OnServerPreStart();
 			}
-			printerThread = new Thread(new ThreadStart(() => new OutputThread(this)));
 			printerThread.Start();
 		}
 
 		public void Stop()
 		{
 			stopping = true;
-			try
+			if (printerThread.IsAlive)
 			{
 				printerThread.Abort();
+				SendMessage("quit");
+				DeleteSession();
 			}
-			catch
-			{
-			}
-			DeleteSession();
+			Program.stopServer(this);
 		}
 
 		public void SoftRestart()
@@ -268,14 +256,14 @@ namespace MegaAdmin
 			{
 				if (command.ToLower() == "config reload")
 				{
-					this.write("Reloading config", Color.Yellow);
-					this.write("if the config opens in notepad, dont worry, thats just the game. It should be reloaded.", Color.Yellow);
+					this.write("Reloading Config...", Color.Blue);
 					Reload();
+					this.write("Config Reloaded!", Color.Green);
 				}
 				else if (command.ToLower() == "quit")
 				{
 					Stop();
-					Program.stopServer(this);
+					return;
 				}
 				else if (command.ToLower() == "restart")
 				{
@@ -293,12 +281,12 @@ namespace MegaAdmin
 
 		private static string logbuff = ""; //buffer log output until we know the servers port if multimode isnt enabled.
 
-		public void Log(string message, string filename = "MA_output_log.txt")
+		public void Log(string message, string filename = "MeA_output_log.txt")
 		{
 			if (!nolog || filename != "MA_output_log.txt")
 			{
 				message = Timestamp(message);
-				if ((!multiMode) && Port == 0)
+				if (Port == 0)
 				{
 					logbuff = logbuff + message + Environment.NewLine;
 				}
@@ -356,23 +344,9 @@ namespace MegaAdmin
 
 		public void Reload()
 		{
-			//SwapConfigs();
-			if (!Directory.Exists(AppFolder))
-			{
-				Directory.CreateDirectory(AppFolder);
-			}
-			Config = new YamlConfig(AppFolder + "config_gameplay.txt");
-
-			nolog = Config.GetBool("multiadmin_nolog") || Config.GetBool("MeA_nolog");
-			multiMode = Config.GetBool("MeA_multimode");
-			if (Config.GetInt("multiadmin_print_speed") != 0)
-			{
-				printSpeed = Config.GetInt("multiadmin_print_speed");
-			}
-			else if (Config.GetInt("MeA_print_speed") != 0)
-			{
-				printSpeed = Config.GetInt("MeA_print_speed");
-			}
+			Config = new YamlConfig("MeA_config.yaml");
+			nolog = Config.GetBool("MeA_nolog");
+			printSpeed = Config.GetInt("MeA_print_speed");
 		}
 
 		public bool ServerModCheck(int major, int minor, int fix)

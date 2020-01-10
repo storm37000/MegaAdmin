@@ -3,3 +3,4 @@ MegaAdmin/Properties/*
 MegaAdmin/obj/*
 MegaAdmin/bin/*
 MegaAdmin/MegaAdmin.csproj.user
+*.user
