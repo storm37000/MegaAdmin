@@ -38,7 +38,6 @@ namespace MegaAdmin
 		public bool nolog { get; private set; }
 		// 
 
-		public string ConfigKey { get; private set; }
 		public string LogFolder
 		{
 			get
@@ -59,10 +58,12 @@ namespace MegaAdmin
 		public bool fixBuggedPlayers { get; set; } = true;
 		public bool runOptimized { get; private set; } = true;
 		public int printSpeed { get; private set; } = 150;
-		public bool stopping { get; private set; }
+		public bool stopping { get; private set; } = false;
+		public bool restarting { get; private set; } = false;
 
-		private Thread printerThread;
+		//private Thread printerThread;
 		public Process GameProcess { get; private set; }
+		private LocalAdminInterface LA;
 
 		public List<Feature> features = new List<Feature>();
 
@@ -80,15 +81,16 @@ namespace MegaAdmin
 
 		public Server(string cfgkey)
 		{
-			this.ConfigKey = cfgkey;
 			new Feature_Loader("MeA_features",this);
 			Reload();
-			printerThread = new Thread(new ThreadStart(() => new OutputThread(this)));
+			//printerThread = new Thread(new ThreadStart(() => new OutputThread(this)));
+			//printerThread.Name = "OutputThread";
+			LA = new LocalAdminInterface(this);
 			Start();
 		}
 
-		public void OnTick()
-		{
+//		public void OnTick()
+//		{
 //			if (GameProcess != null && !GameProcess.HasExited)
 //			{
 //			}
@@ -110,12 +112,15 @@ namespace MegaAdmin
 //				StartServer();
 //				InitFeatures();
 //			}
-		}
+//		}
 
 		private void Start()
 		{
 			stopping = false;
-			SID = Program.GenerateSessionID();
+			restarting = false;
+			//SID = Program.GenerateSessionID();
+			LA.start();
+			return;
 			this.write("starting server with session ID: " + SID, Color.Yellow);
 			InitialRoundStarted = false;
 			string[] files = Directory.GetFiles(Directory.GetCurrentDirectory(), "SCPSL.*", SearchOption.TopDirectoryOnly);
@@ -160,23 +165,44 @@ namespace MegaAdmin
 			{
 				Event.OnServerPreStart();
 			}
-			printerThread.Start();
+			//printerThread.Start();
 		}
 
 		public void Stop()
 		{
-			stopping = true;
-			if (printerThread.IsAlive)
+			write("MeA: Stopping Server...",Color.Yellow);
+			if (LA.started)
 			{
-				printerThread.Abort();
+				//printerThread.Abort();
 				SendMessage("quit");
+				byte wait = 0;
+				while (LA.started)
+				{
+					if(wait > 10)
+					{
+						write("MeA: Server took too long to shut down! killing it forcefully...", Color.Red);
+						LA.process.Kill();
+						LA.process.WaitForExit();
+						break;
+					}
+					else
+					{
+						wait++;
+						Thread.Sleep(1000);
+					}
+				}
 				DeleteSession();
+				write("MeA: Stopped Server", Color.Green);
 			}
-			Program.stopServer(this);
+			if (!restarting)
+			{
+				Program.stopServer(this);
+			}
 		}
 
 		public void SoftRestart()
 		{
+			restarting = true;
 			if (HasServerMod)
 			{
 				SendMessage("RECONNECTRS");
@@ -262,6 +288,7 @@ namespace MegaAdmin
 				}
 				else if (command.ToLower() == "quit")
 				{
+					stopping = true;
 					Stop();
 					return;
 				}
@@ -310,27 +337,27 @@ namespace MegaAdmin
 
 		public void SendMessage(string message)
 		{
-			string sessionDirectory = "SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID;
-			if (!Directory.Exists(sessionDirectory))
-			{
-				this.write("Send Message error: sending " + message + " failed. " + sessionDirectory + " does not exist!", Color.Yellow);
-				this.write("skipping", Color.Yellow);
-				return;
-			}
-
-			string file = sessionDirectory + Path.DirectorySeparatorChar + "cs" + logID + ".mapi";
-			if (File.Exists(file))
-			{
-				this.write("Send Message error: sending " + message + " failed. " + file + " already exists!", Color.Yellow);
-				this.write("skipping", Color.Yellow);
-				logID++;
-				return;
-			}
-			this.write("Sending request to SCP: Secret Laboratory...", Color.Yellow);
-			StreamWriter streamWriter = new StreamWriter(file);
-			logID++;
-			streamWriter.WriteLine(message + "terminator");
-			streamWriter.Close();
+			LA.write(message);
+//			string sessionDirectory = "SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID;
+//			if (!Directory.Exists(sessionDirectory))
+//			{
+//				this.write("Send Message error: sending " + message + " failed. " + sessionDirectory + " does not exist!", Color.Yellow);
+//				this.write("skipping", Color.Yellow);
+//				return;
+//			}
+//			string file = sessionDirectory + Path.DirectorySeparatorChar + "cs" + logID + ".mapi";
+//			if (File.Exists(file))
+//			{
+//				this.write("Send Message error: sending " + message + " failed. " + file + " already exists!", Color.Yellow);
+//				this.write("skipping", Color.Yellow);
+//				logID++;
+//				return;
+//			}
+//			this.write("Sending request to SCP: Secret Laboratory...", Color.Yellow);
+//			StreamWriter streamWriter = new StreamWriter(file);
+//			logID++;
+//			streamWriter.WriteLine(message + "terminator");
+//			streamWriter.Close();
 		}
 
 		public static string Timestamp(string message)

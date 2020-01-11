@@ -14,6 +14,7 @@ namespace MegaAdmin
 
 		public OutputThread(Server server)
 		{
+			server.write("Output Thread started...",Color.White);
 			while (!Directory.Exists("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + server.SID))
 			{
 				//wait for directory to be created...
@@ -174,7 +175,6 @@ namespace MegaAdmin
 
 					// P.S. the format is [Info] [courtney.exampleplugin] Something interesting happened
 					// That was just an example
-					display = false;
 
 					// Limiting output speed for Smod messages
 					Thread.Sleep(server.printSpeed);
@@ -184,9 +184,9 @@ namespace MegaAdmin
 				}
 			}
 
-			if (stream.Contains("Server starting at all IP addresses and port"))
+			if (stream.Contains("Server starting at all IPv4 addresses and port"))
 			{
-				string str = stream.Replace("Server starting at all IP addresses and port ", string.Empty);
+				string str = stream.Replace("Server starting at all IPv4 addresses and port ", string.Empty);
 				server.Port = ushort.Parse(str.Trim());
 			}
 

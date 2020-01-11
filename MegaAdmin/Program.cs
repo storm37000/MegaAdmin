@@ -12,6 +12,7 @@ namespace MegaAdmin
 		public static List<Server> servers = new List<Server>();
 		public static string buffclear = string.Empty;
 		public static Platform platform;
+		private static Thread windowresizewatcher = new Thread(new ThreadStart(() => new WindowResizeWatcherThread()));
 
 		static void Main(string[] args)
 		{
@@ -25,7 +26,8 @@ namespace MegaAdmin
 				}
 				buffclear = buffclear + Environment.NewLine;
 			}
-			new Thread(new ThreadStart(() => new WindowResizeWatcherThread())).Start();
+			windowresizewatcher.Name = "windowresizewatcher";
+			windowresizewatcher.Start();
 			//int lastbuffsize = 0;
 			startServer();
 			while (true)
@@ -130,7 +132,10 @@ namespace MegaAdmin
 			servers.Remove(server);
 			if (servers.Count > 0)
 			{
-				selected--;
+				if(selected > 0)
+				{
+					selected--;
+				}
 				WriteMenu();
 				WriteBuffer(servers[selected]);
 			}
