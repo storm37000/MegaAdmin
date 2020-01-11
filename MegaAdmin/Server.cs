@@ -3,16 +3,21 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace MegaAdmin
 {
 	public class Server
 	{
+		public readonly EventWaitHandle waitHandle = new EventWaitHandle(false, EventResetMode.AutoReset);
+		private bool signaled = false;
+		public readonly EventWaitHandle CMDevent = new EventWaitHandle(false, EventResetMode.AutoReset);
 		private uint logID;
-		public string SID { get; private set; }
+		public string SID { get; private set; } = string.Empty;
 		public ushort Port { get; set; }
 		public List<string> buffer { get; private set; } = new List<string>();
 		public string cmdbuffer = string.Empty;
+		public bool cmdlock { get; private set; } = false;
 		public string Name
 		{
 			get
@@ -27,7 +32,7 @@ namespace MegaAdmin
 				}
 				else
 				{
-					return " Starting Up... ";
+					return " Starting... ";
 				}
 			}
 		}
@@ -79,14 +84,32 @@ namespace MegaAdmin
 		public List<IEventConfigReload> configreload = new List<IEventConfigReload>();
 		//END EVENT LIST
 
-		public Server(string cfgkey)
+		public Server(string sessid)
 		{
+			AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnProcessExit);
+			SID = sessid;
+			Program.servers.Add(this);
+			Program.WriteMenu(this);
 			new Feature_Loader("MeA_features",this);
 			Reload();
 			//printerThread = new Thread(new ThreadStart(() => new OutputThread(this)));
 			//printerThread.Name = "OutputThread";
 			LA = new LocalAdminInterface(this);
 			Start();
+			// Wait if someone tells us to die or do every five seconds something else.
+			do
+			{
+				signaled = waitHandle.WaitOne(10);
+				if (CMDevent.WaitOne(10))
+				{
+					cmd();
+				}
+			} while (!signaled);
+		}
+
+		private void OnProcessExit(object sender, EventArgs e)
+		{
+			Stop();
 		}
 
 //		public void OnTick()
@@ -118,7 +141,6 @@ namespace MegaAdmin
 		{
 			stopping = false;
 			restarting = false;
-			//SID = Program.GenerateSessionID();
 			LA.start();
 			return;
 			this.write("starting server with session ID: " + SID, Color.Yellow);
@@ -170,7 +192,7 @@ namespace MegaAdmin
 
 		public void Stop()
 		{
-			write("MeA: Stopping Server...",Color.Yellow);
+			write("Stopping Server...",Color.Yellow);
 			if (LA.started)
 			{
 				//printerThread.Abort();
@@ -196,6 +218,7 @@ namespace MegaAdmin
 			}
 			if (!restarting)
 			{
+
 				Program.stopServer(this);
 			}
 		}
@@ -209,7 +232,7 @@ namespace MegaAdmin
 			}
 			Stop();
 			Start();
-			Program.WriteMenu();
+			Program.WriteMenu(this);
 		}
 
 		private void CleanSession()
@@ -234,49 +257,45 @@ namespace MegaAdmin
 
 		public void write(string msg, string color)
 		{
-			lock (this)
+			string[] msgspl = Timestamp(msg).Split(new string[] { Environment.NewLine }, StringSplitOptions.None);
+			foreach (string mess in msgspl)
 			{
-				string[] msgspl = Timestamp(msg).Split(new string[] { Environment.NewLine }, StringSplitOptions.None);
-				foreach (string mess in msgspl)
+				if (mess == Environment.NewLine) { continue; }
+				else
 				{
-					if (mess == Environment.NewLine) { continue; }
-					else
-					{
-						buffer.Add(color + mess.Substring(0, Program.ClampI(Console.BufferWidth - 1, 0, mess.Length)) + Color.Reset + Environment.NewLine);
-						Program.WriteBuffer(this);
-					}
+					buffer.Add(color + mess.Substring(0, Program.ClampI(Console.BufferWidth - 1, 0, mess.Length)) + Color.Reset + Environment.NewLine);
+					Program.WriteBuffer(this);
 				}
-				Log(msg);
 			}
+			Log(msg);
 		}
 
 		public void writePart(string msg, string color, bool date = false, bool lineEnd = false)
 		{
-			lock (this)
+			string msgcol = color + msg + Color.Reset;
+			if (date)
 			{
-				string msgcol = color + msg + Color.Reset;
-				if (date)
-				{
-					buffer.Add(Timestamp(msgcol));
-					Program.WriteBuffer(this);
-				}
-				else if (lineEnd && !msg.EndsWith(Environment.NewLine))
-				{
-					buffer.Add(msgcol + Environment.NewLine);
-					Program.WriteBuffer(this);
-				}
-				else
-				{
-					buffer.Add(msgcol);
-					Program.WriteBuffer(this);
-				}
+				buffer.Add(Timestamp(msgcol));
+				Program.WriteBuffer(this);
+			}
+			else if (lineEnd && !msg.EndsWith(Environment.NewLine))
+			{
+				buffer.Add(msgcol + Environment.NewLine);
+				Program.WriteBuffer(this);
+			}
+			else
+			{
+				buffer.Add(msgcol);
+				Program.WriteBuffer(this);
 			}
 		}
 
 		public void cmd()
 		{
+			cmdlock = true;
+			Program.WriteInput(this);
+			bool send = true;
 			string command = cmdbuffer;
-			cmdbuffer = string.Empty;
 			this.write(">>> " + command, Color.DarkMagenta);
 			if (command.Length >= 3)
 			{
@@ -290,20 +309,27 @@ namespace MegaAdmin
 				{
 					stopping = true;
 					Stop();
-					return;
+					send = false;
 				}
 				else if (command.ToLower() == "restart")
 				{
 					SoftRestart();
-					return;
+					send = false;
 				}
 				else if (command.ToLower().Substring(0, 3) == "new")
 				{
 					Program.startServer();
-					return;
+					send = false;
 				}
 			}
-			SendMessage(command);
+			if (send)
+			{
+				SendMessage(command);
+			}
+			cmdlock = false;
+			CMDevent.Reset();
+			cmdbuffer = string.Empty;
+			Program.WriteInput(this);
 		}
 
 		private static string logbuff = ""; //buffer log output until we know the servers port if multimode isnt enabled.

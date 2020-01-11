@@ -18,7 +18,7 @@ namespace MegaAdmin
 					lasth = Console.WindowHeight;
 					Console.Clear();
 					Program.WriteBuffer(Program.servers[Program.selected]);
-					Program.WriteMenu();
+					Program.WriteMenu(Program.servers[Program.selected]);
 					Program.buffclear = string.Empty;
 					for (ushort x = 0; x < Console.WindowTop + Console.WindowHeight - 3; x++)
 					{

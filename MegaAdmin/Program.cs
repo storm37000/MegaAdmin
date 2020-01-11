@@ -16,7 +16,7 @@ namespace MegaAdmin
 
 		static void Main(string[] args)
 		{
-			AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnProcessExit);
+			//AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnProcessExit);
 			platform = RunningPlatform();
 			for (ushort x = 0; x < Console.WindowTop + Console.WindowHeight - 3; x++)
 			{
@@ -50,7 +50,7 @@ namespace MegaAdmin
 							{
 								selected--;
 								WriteBuffer(servers[selected]);
-								WriteMenu();
+								WriteMenu(servers[selected]);
 							}
 							break;
 						case ConsoleKey.RightArrow:
@@ -58,7 +58,7 @@ namespace MegaAdmin
 							{
 								selected++;
 								WriteBuffer(servers[selected]);
-								WriteMenu();
+								WriteMenu(servers[selected]);
 							}
 							break;
 						case ConsoleKey.F3:
@@ -71,10 +71,10 @@ namespace MegaAdmin
 							//scroll forwards in time
 							break;
 						default:
+							if (servers[selected].cmdlock) { break; }
 							if (key.Key == ConsoleKey.Enter)
 							{
-								servers[selected].cmd();
-								WriteInput();
+								servers[selected].CMDevent.Set();
 							}
 							else
 							{
@@ -87,7 +87,7 @@ namespace MegaAdmin
 									servers[selected].cmdbuffer = servers[selected].cmdbuffer + key.KeyChar;
 								}
 							}
-							WriteInput();
+							WriteInput(servers[selected]);
 							break;
 					}
 				//}
@@ -122,25 +122,27 @@ namespace MegaAdmin
 			}
 			return enc8.GetString(buf);
 		}
-		public static void startServer(string cfgkey = "")
+		public static void startServer()
 		{
-			servers.Add(new Server(cfgkey));
-			WriteMenu();
+			new Thread(new ThreadStart(() => new Server(GenerateSessionID()))).Start();
 		}
 		public static void stopServer(Server server)
 		{
-			servers.Remove(server);
-			if (servers.Count > 0)
+			if (servers.Count > 1)
 			{
 				if(selected > 0)
 				{
 					selected--;
 				}
-				WriteMenu();
 				WriteBuffer(servers[selected]);
+				servers.Remove(server);
+				server.waitHandle.Set();
+				WriteMenu(servers[selected]);
 			}
 			else
 			{
+				servers.Remove(server);
+				server.waitHandle.Set();
 				Environment.Exit(0);
 			}
 		}
@@ -153,10 +155,18 @@ namespace MegaAdmin
 			}
 			Console.Write(str);
 		}
-		private static void WriteInput()
+		public static void WriteInput(Server server)
 		{
+			if (servers[selected] != server) { return; }
 			Console.SetCursorPosition(0, Console.WindowTop + Console.WindowHeight - 2);
-			Console.BackgroundColor = ConsoleColor.DarkBlue;
+			if (server.cmdlock) {
+				Console.BackgroundColor = ConsoleColor.DarkRed;
+			}
+			else
+			{
+				Console.BackgroundColor = ConsoleColor.DarkBlue;
+			}
+			
 			ClearLine();
 			Console.SetCursorPosition(0, Console.WindowTop + Console.WindowHeight - 2);
 			Console.Write("Enter a Command: ");
@@ -165,25 +175,26 @@ namespace MegaAdmin
 		}
 		public static void WriteBuffer(Server server)
 		{
+			if (servers[selected] != server) { return; }
 			int buffoffset = 0;
 			int maxh = Console.WindowTop + Console.WindowHeight - 3;
-			if (server.buffer.Count > maxh)
+			if (servers[selected].buffer.Count > maxh)
 			{
 				buffoffset = servers[selected].buffer.Count - maxh;
 			}
 			string str = string.Empty;
-			for (int i = 0 + buffoffset; i < ClampI(maxh+buffoffset, 0, server.buffer.Count); i++)
+			for (int i = 0 + buffoffset; i < ClampI(maxh+buffoffset, 0, servers[selected].buffer.Count); i++)
 			{
-				str = str + server.buffer[i];
+				str = str + servers[selected].buffer[i];
 			}
 			Console.SetCursorPosition(0, 0);
 			Console.Write(buffclear);
 			Console.SetCursorPosition(0, 0);
 			Console.Write(str);
 		}
-		public static void WriteMenu()
+		public static void WriteMenu(Server server)
 		{
-			WriteInput();
+			WriteInput(server);
 			int maxw = Console.BufferWidth;
 //			if (offset < servers.Count && selected == maxw / 19)
 //			{
@@ -209,13 +220,13 @@ namespace MegaAdmin
 			}
 		}
 
-		static void OnProcessExit(object sender, EventArgs e)
-		{
-			for (byte i = (byte)servers.Count;i==1;i--)
-			{
-				servers[i].Stop();
-			}
-		}
+//		static void OnProcessExit(object sender, EventArgs e)
+//		{
+//			for (byte i = (byte)servers.Count;i==1;i--)
+//			{
+//				servers[i].Stop();
+//			}
+//		}
 
 		public enum Platform
 		{
