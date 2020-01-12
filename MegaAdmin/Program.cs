@@ -124,7 +124,7 @@ namespace MegaAdmin
 		}
 		public static void startServer()
 		{
-			new Thread(new ThreadStart(() => new Server(GenerateSessionID()))).Start();
+			new Thread(new ThreadStart(() => new Server())).Start();
 		}
 		public static void stopServer(Server server)
 		{
@@ -134,14 +134,13 @@ namespace MegaAdmin
 				{
 					selected--;
 				}
+				server.waitHandle.Set();
 				WriteBuffer(servers[selected]);
 				servers.Remove(server);
-				server.waitHandle.Set();
 				WriteMenu(servers[selected]);
 			}
 			else
 			{
-				servers.Remove(server);
 				server.waitHandle.Set();
 				Environment.Exit(0);
 			}
@@ -220,13 +219,13 @@ namespace MegaAdmin
 			}
 		}
 
-//		static void OnProcessExit(object sender, EventArgs e)
-//		{
-//			for (byte i = (byte)servers.Count;i==1;i--)
-//			{
-//				servers[i].Stop();
-//			}
-//		}
+		static void OnProcessExit(object sender, EventArgs e)
+		{
+			for (byte i = (byte)servers.Count;i==1;i--)
+			{
+				servers[i].Stop();
+			}
+		}
 
 		public enum Platform
 		{

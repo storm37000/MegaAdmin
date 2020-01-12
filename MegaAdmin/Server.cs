@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace MegaAdmin
 {
@@ -84,10 +83,8 @@ namespace MegaAdmin
 		public List<IEventConfigReload> configreload = new List<IEventConfigReload>();
 		//END EVENT LIST
 
-		public Server(string sessid)
+		public Server()
 		{
-			AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnProcessExit);
-			SID = sessid;
 			Program.servers.Add(this);
 			Program.WriteMenu(this);
 			new Feature_Loader("MeA_features",this);
@@ -105,11 +102,6 @@ namespace MegaAdmin
 					cmd();
 				}
 			} while (!signaled);
-		}
-
-		private void OnProcessExit(object sender, EventArgs e)
-		{
-			Stop();
 		}
 
 //		public void OnTick()
@@ -141,6 +133,7 @@ namespace MegaAdmin
 		{
 			stopping = false;
 			restarting = false;
+			//SID = Program.GenerateSessionID();
 			LA.start();
 			return;
 			this.write("starting server with session ID: " + SID, Color.Yellow);
@@ -202,7 +195,7 @@ namespace MegaAdmin
 				{
 					if(wait > 10)
 					{
-						write("MeA: Server took too long to shut down! killing it forcefully...", Color.Red);
+						write("Server took too long to shut down! killing it forcefully...", Color.Red);
 						LA.process.Kill();
 						LA.process.WaitForExit();
 						break;
@@ -214,7 +207,7 @@ namespace MegaAdmin
 					}
 				}
 				DeleteSession();
-				write("MeA: Stopped Server", Color.Green);
+				write("Stopped Server", Color.Green);
 			}
 			if (!restarting)
 			{
@@ -250,6 +243,7 @@ namespace MegaAdmin
 
 		private void DeleteSession()
 		{
+			if (SID == string.Empty) { return; }
 			CleanSession();
 			string path = "SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID;
 			if (Directory.Exists(path)) Directory.Delete(path);
