@@ -38,6 +38,7 @@ namespace MegaAdmin
 			try
 			{
 				process.Start();
+				process.BeginOutputReadLine();
 				started = true;
 				server.write("Server Started", Color.Green);
 			}
@@ -104,7 +105,11 @@ namespace MegaAdmin
 			if (stream.Contains("Server starting at all IPv4 addresses and port"))
 			{
 				string str = stream.Replace("Server starting at all IPv4 addresses and port ", string.Empty);
-				server.Port = ushort.Parse(str.Trim());
+				ushort port = 0;
+				if (ushort.TryParse(str.Trim(),out port))
+				{
+					server.Port = port;
+				}
 			}
 			else if (stream.Contains("Mod Log:"))
 			{

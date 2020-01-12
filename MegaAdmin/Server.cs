@@ -189,29 +189,19 @@ namespace MegaAdmin
 			if (LA.started)
 			{
 				//printerThread.Abort();
-				SendMessage("quit");
-				byte wait = 0;
-				while (LA.started)
+				SendMessage("exit");
+				LA.process.WaitForExit(10000);
+				if (LA.started)
 				{
-					if(wait > 10)
-					{
-						write("Server took too long to shut down! killing it forcefully...", Color.Red);
-						LA.process.Kill();
-						LA.process.WaitForExit();
-						break;
-					}
-					else
-					{
-						wait++;
-						Thread.Sleep(1000);
-					}
+					write("Server took too long to shut down! killing it forcefully...", Color.Red);
+					LA.process.Kill();
+					LA.process.WaitForExit();
 				}
 				DeleteSession();
 				write("Stopped Server", Color.Green);
 			}
 			if (!restarting)
 			{
-
 				Program.stopServer(this);
 			}
 		}
