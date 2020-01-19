@@ -25,7 +25,7 @@ namespace MegaAdmin
 			{
 				if (Port != 0)
 				{
-					return "Port:      " + Port;
+					return "Port:" + Port;
 				}
 				else if (SID != string.Empty)
 				{
@@ -93,6 +93,21 @@ namespace MegaAdmin
 
 		private static readonly Regex SmodRegex = new Regex(@"\[(DEBUG|INFO|WARN|ERROR)\] (\[.*?\]) (.*)", RegexOptions.Compiled | RegexOptions.Singleline);
 		private bool fixBuggedPlayers;
+		private FileSystemWatcher watcher;
+		public bool IsWatcherRunning
+		{
+			get
+			{
+				if (watcher == null)
+				{
+					return false;
+				}
+				else
+				{
+					return true;
+				}
+			}
+		}
 
 		public Server()
 		{
@@ -148,6 +163,20 @@ namespace MegaAdmin
 			stopping = false;
 			restarting = false;
 			SID = Program.GenerateSessionID();
+			if (!Directory.Exists("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated"))
+			{
+				write("Failed - couldnt find server install!", Color.Red);
+				write("Please run the 'restart' command to try again...", Color.Gray);
+				cmdlock = false;
+				Program.WriteInput(this);
+				return;
+			}
+			string path = "SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID;
+			Directory.CreateDirectory(path);
+			watcher = new FileSystemWatcher(path, "sl*.mapi");
+			watcher.IncludeSubdirectories = false;
+			watcher.Created += OnMapiCreated;
+			watcher.EnableRaisingEvents = true;
 			this.write("starting server with session ID: " + SID, Color.Yellow);
 			InitialRoundStarted = false;
 			string[] files = Directory.GetFiles(Directory.GetCurrentDirectory(), "SCPSL.*", SearchOption.TopDirectoryOnly);
@@ -196,28 +225,11 @@ namespace MegaAdmin
 //			}
 			scpslArgs.RemoveAll(string.IsNullOrEmpty);
 			string args = string.Join(" ", scpslArgs);
-			Directory.CreateDirectory("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID);
-			FileSystemWatcher watcher = new FileSystemWatcher("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID, "sl*.mapi");
-			watcher.IncludeSubdirectories = false;
-			watcher.Created += OnMapiCreated;
-			watcher.EnableRaisingEvents = true;
 			write("Starting server with the following parameters", Color.Yellow);
-			try
-			{
-				write(files[0] + " " + args,Color.Yellow);
-				GameProcess = Process.Start(new ProcessStartInfo(files[0], args));
-				GameProcess.Exited += GameProcess_Exited;
-				GameProcess.EnableRaisingEvents = true;
-			}
-			catch (Exception e)
-			{
-				write("Failed - Executable file or config issue!", Color.Red);
-				write(e.Message, Color.Red);
-				write("Please run the 'restart' command to try again...", Color.Gray);
-				cmdlock = false;
-				Program.WriteInput(this);
-				return;
-			}
+			write(files[0] + " " + args, Color.Yellow);
+			GameProcess = Process.Start(new ProcessStartInfo(files[0], args));
+			GameProcess.Exited += GameProcess_Exited;
+			GameProcess.EnableRaisingEvents = true;
 			foreach (IEventServerPreStart Event in preserverstart)
 			{
 				Event.OnServerPreStart();
@@ -228,6 +240,7 @@ namespace MegaAdmin
 
 		private void GameProcess_Exited(object sender, EventArgs e)
 		{
+			if (restarting || stopping) { return; }
 			write("Server has stopped unexpectedly! Restarting...",Color.Red);
 			HardRestart();
 		}
@@ -238,7 +251,7 @@ namespace MegaAdmin
 			{
 				write("Stopping Server...", Color.Yellow);
 				SendMessage("quit");
-				while (!GameProcess.HasExited){}
+				while (!GameProcess.HasExited){ Thread.Sleep(1); }
 				GameProcess.Dispose();
 				GameProcess = null;
 				write("Stopped Server", Color.Green);
@@ -284,6 +297,11 @@ namespace MegaAdmin
 		private void DeleteSession()
 		{
 			if (SID == string.Empty) { return; }
+			if (IsWatcherRunning)
+			{
+				watcher.Dispose();
+				watcher = null;
+			}
 			CleanSession();
 			string path = "SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID;
 			if (Directory.Exists(path)) Directory.Delete(path);
