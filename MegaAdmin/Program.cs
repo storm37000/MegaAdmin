@@ -5,19 +5,24 @@ using System.Threading;
 
 namespace MegaAdmin
 {
+	enum Platform
+	{
+		Windows,
+		Linux,
+		Mac
+	}
 	class Program
 	{
-		public static byte selected = 0;
+		public static byte selected { get; private set; } = 0;
 		private static byte offset = 0;
-		public static List<Server> servers = new List<Server>();
+		public static readonly List<Server> servers = new List<Server>();
 		public static string buffclear = string.Empty;
-		public static Platform platform;
-		private static Thread windowresizewatcher = new Thread(new ThreadStart(() => new WindowResizeWatcherThread()));
+		private static readonly Thread windowresizewatcher = new Thread(new ThreadStart(() => new WindowResizeWatcherThread()));
+		public static readonly Platform RunningPlatform = GetRunningPlatform();
 
 		static void Main(string[] args)
 		{
 			//AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnProcessExit);
-			platform = RunningPlatform();
 			for (ushort x = 0; x < Console.WindowTop + Console.WindowHeight - 3; x++)
 			{
 				for (ushort i = 0; i < Console.WindowWidth-1; i++)
@@ -125,7 +130,9 @@ namespace MegaAdmin
 		}
 		public static void startServer()
 		{
-			new Thread(new ThreadStart(() => new Server())).Start();
+			Thread server = new Thread(new ThreadStart(() => new Server()));
+			server.Name = "server_thread_" + servers.Count;
+			server.Start();
 		}
 		public static void stopServer(Server server)
 		{
@@ -228,14 +235,7 @@ namespace MegaAdmin
 			}
 		}
 
-		public enum Platform
-		{
-			Windows,
-			Linux,
-			Mac
-		}
-
-		public static Platform RunningPlatform()
+		private static Platform GetRunningPlatform()
 		{
 			switch (Environment.OSVersion.Platform)
 			{

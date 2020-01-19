@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
 
@@ -14,7 +15,7 @@ namespace MegaAdmin
 		public readonly EventWaitHandle CMDevent = new EventWaitHandle(false, EventResetMode.AutoReset);
 		private uint logID;
 		public string SID { get; private set; } = string.Empty;
-		public ushort Port { get; set; }
+		public ushort Port { get; private set; } = (ushort)(7777 + Program.servers.Count);
 		public List<string> buffer { get; private set; } = new List<string>();
 		public string cmdbuffer = string.Empty;
 		public bool cmdlock { get; private set; } = false;
@@ -36,13 +37,8 @@ namespace MegaAdmin
 				}
 			}
 		}
-		public string AppFolder { get; } = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + Path.DirectorySeparatorChar + "SCP Secret Laboratory" + Path.DirectorySeparatorChar;
+		public readonly string AppFolder = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + Path.DirectorySeparatorChar + "SCP Secret Laboratory" + Path.DirectorySeparatorChar;
 		public YamlConfig Config { get; private set; }
-
-		// set via config files
-		public bool nolog { get; private set; }
-		// 
-
 		public string LogFolder
 		{
 			get
@@ -55,31 +51,44 @@ namespace MegaAdmin
 				return loc;
 			}
 		}
-		public bool HasServerMod { get; set; }
-		public string ServerModVersion { get; set; }
-		public string ServerModBuild { get; set; }
-
-		public bool InitialRoundStarted { get; set; }
-		public bool runOptimized { get; private set; } = true;
-		public int printSpeed { get; private set; } = 150;
+		public bool HasServerMod { get; private set; }
+		public string ServerModVersion { get; private set; }
+		public string ServerModBuild { get; private set; }
+		public bool InitialRoundStarted { get; private set; }
 		public bool stopping { get; private set; } = false;
 		public bool restarting { get; private set; } = false;
 
-		//private Thread printerThread;
 		public Process GameProcess { get; private set; }
+		public bool IsGameProcessRunning
+		{
+			get
+			{
+				if (GameProcess == null)
+					return false;
 
-		public List<Feature> features = new List<Feature>();
+				GameProcess.Refresh();
+
+				return !GameProcess.HasExited;
+			}
+		}
+
+		// set via config files
+		public bool nolog { get; private set; }
+		//public bool runOptimized { get; private set; } = true;
+		//public int printSpeed { get; private set; } = 150;
+		public bool DisableConfigValidation { get; private set; }
+		public bool ShareNonConfigs { get; private set; }
 
 		//BEGIN EVENT LIST
-		public List<IEventRoundEnd> roundend = new List<IEventRoundEnd>();
-		public List<IEventRoundStart> roundstart = new List<IEventRoundStart>();
-		public List<IEventAdminAction> adminaction = new List<IEventAdminAction>();
-		public List<IEventServerStart> serverstart = new List<IEventServerStart>();
-		public List<IEventServerPreStart> preserverstart = new List<IEventServerPreStart>();
-		public List<IEventServerFull> serverfull = new List<IEventServerFull>();
-		public List<IEventPlayerConnect> playerconnect = new List<IEventPlayerConnect>();
-		public List<IEventPlayerDisconnect> playerdisconnect = new List<IEventPlayerDisconnect>();
-		public List<IEventConfigReload> configreload = new List<IEventConfigReload>();
+		public readonly List<IEventRoundEnd> roundend = new List<IEventRoundEnd>();
+		public readonly List<IEventRoundStart> roundstart = new List<IEventRoundStart>();
+		public readonly List<IEventAdminAction> adminaction = new List<IEventAdminAction>();
+		public readonly List<IEventServerStart> serverstart = new List<IEventServerStart>();
+		public readonly List<IEventServerPreStart> preserverstart = new List<IEventServerPreStart>();
+		public readonly List<IEventServerFull> serverfull = new List<IEventServerFull>();
+		public readonly List<IEventPlayerConnect> playerconnect = new List<IEventPlayerConnect>();
+		public readonly List<IEventPlayerDisconnect> playerdisconnect = new List<IEventPlayerDisconnect>();
+		public readonly List<IEventConfigReload> configreload = new List<IEventConfigReload>();
 		//END EVENT LIST
 
 		private static readonly Regex SmodRegex = new Regex(@"\[(DEBUG|INFO|WARN|ERROR)\] (\[.*?\]) (.*)", RegexOptions.Compiled | RegexOptions.Singleline);
@@ -90,12 +99,10 @@ namespace MegaAdmin
 			cmdlock = true;
 			Program.servers.Add(this);
 			Program.WriteMenu(this);
-			//new Feature_Loader("MeA_features",this);
+			//Feature_Loader("MeA_features", this);
 			Reload();
-			//printerThread = new Thread(new ThreadStart(() => new OutputThread(this)));
-			//printerThread.Name = "OutputThread";
 			Start();
-			// Wait if someone tells us to die or do every five seconds something else.
+			// Wait if someone tells us to die or do something else.
 			do
 			{
 				signaled = waitHandle.WaitOne(10);
@@ -106,30 +113,35 @@ namespace MegaAdmin
 			} while (!signaled);
 		}
 
-//		public void OnTick()
-//		{
-//			if (GameProcess != null && !GameProcess.HasExited)
-//			{
-//			}
-//			else if (!stopping)
-//			{
-//				foreach (IEventCrash f in cras)
-//				{
-//					if (f is IEventCrash)
-//					{
-//						((IEventCrash)f).OnCrash();
-//					}
-//				}
-//
-//				Write("Game engine exited/crashed/closed/restarting", ConsoleColor.Red);
-//				Write("Cleaning Session", ConsoleColor.Red);
-//				CleanUp();
-//				GenerateSessionID();
-//				Write("Restarting game with new session id");
-//				StartServer();
-//				InitFeatures();
-//			}
-//		}
+		private void Feature_Loader(string featuredir, Server server)
+		{
+			DirectoryInfo dir = new DirectoryInfo(featuredir);
+
+			if (!dir.Exists)
+			{
+				dir.Create();
+			}
+
+			foreach (FileInfo file in dir.GetFiles("*.dll"))
+			{
+				Assembly assembly = Assembly.LoadFrom(file.FullName);
+				foreach (Type type in assembly.GetTypes())
+				{
+					if (type.IsSubclassOf(typeof(Feature)) && type.IsAbstract == false)
+					{
+						Feature b = type.InvokeMember(null, BindingFlags.CreateInstance, null, null, null) as Feature;
+						b.Server = server;
+						try
+						{
+							b.Init();
+						}catch(Exception e)
+						{
+							write("[MeA Feature] [" + b.ID + "] Error in Init()  -  " + e.Message,Color.Red);
+						}
+					}
+				}
+			}
+		}
 
 		private void Start()
 		{
@@ -147,22 +159,43 @@ namespace MegaAdmin
 				Program.WriteInput(this);
 				return;
 			}
-			string args;
+			List<string> scpslArgs = new List<string>
+					{
+						"-batchmode",
+						"-nographics",
+						"-silent-crashes",
+						"-nodedicateddelete",
+						$"-key{SID}",
+						$"-id{Process.GetCurrentProcess().Id}",
+						$"-port{Port}"
+					};
 			if (nolog) //nolog
 			{
-				if (Program.RunningPlatform() != Program.Platform.Windows)
-				{
-					args = "-batchmode -nographics -nolog -silent-crashes -nodedicateddelete -key" + SID + " -id" + Process.GetCurrentProcess().Id + " -logFile /dev/null -port 7777";
-				}
+				scpslArgs.Add("-nolog");
+
+				if (Program.RunningPlatform != Platform.Windows)
+					scpslArgs.Add("-logFile \"/dev/null\"");
 				else
-				{
-					args = "-batchmode -nographics -nolog -silent-crashes -nodedicateddelete -key" + SID + " -id" + Process.GetCurrentProcess().Id + " -logFile NUL";
-				}
+					scpslArgs.Add("-logFile \"NUL\"");
 			}
 			else
 			{
-				args = "-batchmode -nographics -silent-crashes -nodedicateddelete -key" + SID + " -id" + Process.GetCurrentProcess().Id + " -logFile \"" + LogFolder + "SCP_output_log.txt" + "\"";
+				scpslArgs.Add($"-logFile \"{LogFolder + "SCP_output_log.txt"}\"");
 			}
+			if (DisableConfigValidation)
+			{
+				scpslArgs.Add("-disableconfigvalidation");
+			}
+			if (ShareNonConfigs)
+			{
+				scpslArgs.Add("-sharenonconfigs");
+			}
+//			if (!string.IsNullOrEmpty(configLocation))
+//			{
+//				scpslArgs.Add($"-configpath \"{configLocation}\"");
+//			}
+			scpslArgs.RemoveAll(string.IsNullOrEmpty);
+			string args = string.Join(" ", scpslArgs);
 			Directory.CreateDirectory("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID);
 			FileSystemWatcher watcher = new FileSystemWatcher("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID, "sl*.mapi");
 			watcher.IncludeSubdirectories = false;
@@ -171,10 +204,10 @@ namespace MegaAdmin
 			write("Starting server with the following parameters", Color.Yellow);
 			try
 			{
-				write(files[0] + " " + args, Color.Yellow);
-				ProcessStartInfo startInfo = new ProcessStartInfo(files[0]);
-				startInfo.Arguments = args;
-				GameProcess = Process.Start(startInfo);
+				write(files[0] + " " + args,Color.Yellow);
+				GameProcess = Process.Start(new ProcessStartInfo(files[0], args));
+				GameProcess.Exited += GameProcess_Exited;
+				GameProcess.EnableRaisingEvents = true;
 			}
 			catch (Exception e)
 			{
@@ -193,13 +226,21 @@ namespace MegaAdmin
 			Program.WriteInput(this);
 		}
 
+		private void GameProcess_Exited(object sender, EventArgs e)
+		{
+			write("Server has stopped unexpectedly! Restarting...",Color.Red);
+			HardRestart();
+		}
+
 		public void Stop()
 		{
-			if (GameProcess != null)
+			if (IsGameProcessRunning)
 			{
 				write("Stopping Server...", Color.Yellow);
 				SendMessage("quit");
 				while (!GameProcess.HasExited){}
+				GameProcess.Dispose();
+				GameProcess = null;
 				write("Stopped Server", Color.Green);
 			}
 			DeleteSession();
@@ -211,8 +252,17 @@ namespace MegaAdmin
 
 		public void SoftRestart()
 		{
+			write("Restarting server with a new Session ID...", Color.Yellow);
 			restarting = true;
 			SendMessage("RECONNECTRS");
+			Stop();
+			Start();
+			Program.WriteMenu(this);
+		}
+
+		public void HardRestart()
+		{
+			restarting = true;
 			Stop();
 			Start();
 			Program.WriteMenu(this);
@@ -400,7 +450,9 @@ namespace MegaAdmin
 		{
 			Config = new YamlConfig("MeA_config.yaml");
 			nolog = Config.GetBool("nolog",true);
-			printSpeed = Config.GetInt("print_speed");
+			//printSpeed = Config.GetInt("print_speed");
+			DisableConfigValidation = Config.GetBool("disable_config_validation");
+			ShareNonConfigs = Config.GetBool("share_non_configs", true);
 		}
 
 		private bool ServerModCheck(int major, int minor, int fix)
@@ -572,16 +624,7 @@ namespace MegaAdmin
 					return;
 				}
 			}
-			if (stream.Contains("Server starting at all IPv4 addresses and port"))
-			{
-				string str = stream.Replace("Server starting at all IPv4 addresses and port ", string.Empty);
-				ushort port = 0;
-				if (ushort.TryParse(str.Trim(), out port))
-				{
-					Port = port;
-				}
-			}
-			else if (stream.Contains("Mod Log:"))
+			if (stream.Contains("Mod Log:"))
 			{
 				foreach (IEventAdminAction Event in adminaction)
 				{
@@ -669,7 +712,7 @@ namespace MegaAdmin
 			if (display)
 			{
 				write(stream, color);
-				Thread.Sleep(printSpeed);
+				//Thread.Sleep(printSpeed);
 			}
 		}
 	}
