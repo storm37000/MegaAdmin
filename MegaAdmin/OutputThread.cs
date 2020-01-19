@@ -8,12 +8,13 @@ namespace MegaAdmin
 {
 	class OutputThread
 	{
-		public readonly Regex SMOD_REGEX = new Regex(@"\[(DEBUG|INFO|WARN|ERROR)\] (\[.*?\]) (.*)", RegexOptions.Compiled | RegexOptions.Singleline);
-		public readonly string DEFAULT_FOREGROUND = Color.Cyan;
-		public readonly string DEFAULT_BACKGROUND = Color.Black;
+		private static readonly Regex SmodRegex = new Regex(@"\[(DEBUG|INFO|WARN|ERROR)\] (\[.*?\]) (.*)", RegexOptions.Compiled | RegexOptions.Singleline);
+		private bool fixBuggedPlayers;
+		private Server server;
 
 		public OutputThread(Server server)
 		{
+			this.server = server;
 			server.write("Output Thread started...",Color.White);
 			while (!Directory.Exists("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + server.SID))
 			{
@@ -21,124 +22,120 @@ namespace MegaAdmin
 			}
 			FileSystemWatcher watcher = new FileSystemWatcher("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + server.SID, "sl*.mapi");
 			watcher.IncludeSubdirectories = false;
-
-			//if (Program.platform == Program.Platform.Linux)
-			//{
-				ReadLinux(server, watcher);
-			//}
-			//else
-			//{
-			//	ReadWindows(server, watcher);
-			//}
-		}
-
-		public void ReadWindows(Server server, FileSystemWatcher watcher)
-		{
-			watcher.Changed += new FileSystemEventHandler((sender, eventArgs) => OnDirectoryChanged(sender, eventArgs, server));
+			watcher.Created += OnMapiCreated;
 			watcher.EnableRaisingEvents = true;
 		}
 
-		public void ReadLinux(Server server, FileSystemWatcher watcher)
+		private bool ServerModCheck(int major, int minor, int fix)
 		{
-			watcher.Created += new FileSystemEventHandler((sender, eventArgs) => OnMapiCreated(sender, eventArgs, server));
-			watcher.EnableRaisingEvents = true;
-		}
-
-		private void OnDirectoryChanged(object source, FileSystemEventArgs e, Server server)
-		{
-			if (!Directory.Exists(e.FullPath))
+			if (server.ServerModVersion == null)
 			{
-				return;
+				return false;
 			}
-			string[] files = Directory.GetFiles(e.FullPath, "sl*.mapi", SearchOption.TopDirectoryOnly).OrderBy(f => f).ToArray<string>();
-			foreach (string file in files)
+
+			string[] parts = server.ServerModVersion.Split('.');
+			int verMajor = 0;
+			int verMinor = 0;
+			int verFix = 0;
+			if (parts.Length == 3)
 			{
-				ProcessFile(server, file);
+				Int32.TryParse(parts[0], out verMajor);
+				Int32.TryParse(parts[1], out verMinor);
+				Int32.TryParse(parts[2], out verFix);
+			}
+			else if (parts.Length == 2)
+			{
+				Int32.TryParse(parts[0], out verMajor);
+				Int32.TryParse(parts[1], out verMinor);
+			}
+			else
+			{
+				return false;
+			}
+
+			if (major == 0 && minor == 0 && verFix == 0)
+			{
+				return false;
+			}
+
+			return (verMajor > major) || (verMajor >= major && verMinor > minor) || (verMajor >= major && verMinor >= minor && verFix >= fix);
+
+		}
+
+		private void OnMapiCreated(object sender, FileSystemEventArgs e)
+		{
+			if (!File.Exists(e.FullPath)) return;
+
+			try
+			{
+				ProcessFile(e.FullPath);
+			}
+			catch (Exception ex)
+			{
+				server.write(ex.Message, Color.Red);
 			}
 		}
 
-		private void OnMapiCreated(object source, FileSystemEventArgs e, Server server)
-		{
-			Thread.Sleep(15);
-			ProcessFile(server, e.FullPath);
-		}
-
-		private void ProcessFile(Server server, string file)
+		private void ProcessFile(string file)
 		{
 			string stream = string.Empty;
 			string command = "open";
-			int attempts = 0;
-			bool read = false;
+			bool isRead = false;
 
-			while (attempts < (server.runOptimized ? 10 : 100) && !read && !server.stopping)
+			// Lock this object to wait for this event to finish before trying to read another file
+			lock (this)
 			{
-				try
+				for (int attempts = 0; attempts < 100; attempts++)
 				{
-					if (!File.Exists(file))
+					try
 					{
-						// The file definitely existed at the moment Change event was raised by OS
-						// If the file is not here after 15 ms that means that
-						// (a) either it was already processed
-						// (b) it was deleted by some other application
-						return;
-					}
+						if (!File.Exists(file)) return;
 
-					StreamReader sr = new StreamReader(file);
-					stream = sr.ReadToEnd();
-					command = "close";
-					sr.Close();
-					command = "delete";
-					File.Delete(file);
-					read = true;
-				}
-				catch
-				{
-					attempts++;
-					if (attempts >= (server.runOptimized ? 10 : 100))
+						// Lock the file to prevent it from being modified further, or read by another instance
+						using (StreamReader sr = new StreamReader(new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None)))
+						{
+							command = "read";
+							stream = sr.ReadToEnd();
+
+							isRead = true;
+						}
+
+						command = "delete";
+						File.Delete(file);
+
+						break;
+					}
+					catch (UnauthorizedAccessException e)
 					{
-						server.write("Message printer warning: Could not " + command + " " + file + ". Make sure that MultiAdmin.exe has all necessary read-write permissions.", Color.Yellow);
-						server.write("skipping", Color.Yellow);
+						server.write(e.Message, Color.Red);
+						Thread.Sleep(8);
+					}
+					catch (Exception e)
+					{
+						server.write(e.Message, Color.Red);
+						Thread.Sleep(5);
 					}
 				}
 			}
 
-			if (server.stopping) return;
+			if (!isRead)
+			{
+				server.write($"Message printer warning: Could not {command} \"{file}\". Make sure that {nameof(MegaAdmin)} has all necessary read-write permissions\nSkipping...",Color.Red);
 
-			bool display = true;
+				return;
+			}
+
 			string color = Color.Cyan;
+			bool display = true;
 
-			if (!string.IsNullOrEmpty(stream.Trim()))
-			{
-				if (stream.Contains("LOGTYPE"))
-				{
-					string type = stream.Substring(stream.IndexOf("LOGTYPE")).Trim();
-					stream = stream.Substring(0, stream.IndexOf("LOGTYPE")).Trim();
-
-					switch (type)
-					{
-						case "LOGTYPE02":
-							color = Color.Green;
-							break;
-						case "LOGTYPE-8":
-							color = Color.DarkRed;
-							break;
-						case "LOGTYPE14":
-							color = Color.Magenta;
-							break;
-						default:
-							color = Color.Cyan;
-							break;
-					}
-				}
-			}
-
-			string[] streamSplit;
+			if (stream.EndsWith(Environment.NewLine))
+				stream = stream.Substring(0, stream.Length - Environment.NewLine.Length);
 
 			// Smod2 loggers pretty printing
-			var match = SMOD_REGEX.Match(stream);
+			Match match = SmodRegex.Match(stream);
 			if (match.Success)
 			{
-				if (match.Groups.Count >= 2)
+				if (match.Groups.Count >= 3)
 				{
 					string levelColor = Color.Cyan;
 					string tagColor = Color.Yellow;
@@ -159,138 +156,91 @@ namespace MegaAdmin
 							msgColor = Color.Red;
 							break;
 						default:
-							color = Color.Cyan;
 							break;
 					}
 
-					lock (server)
-					{
-						server.writePart(string.Empty, Color.Cyan, true, false);
-						server.writePart("[" + match.Groups[1].Value + "] ", levelColor, false, false);
-						server.writePart(match.Groups[2].Value + " ", tagColor, false, false);
-						server.writePart(match.Groups[3].Value, msgColor, false, true);
-					}
-
-					server.Log("[" + match.Groups[1].Value + "] " + match.Groups[2].Value + " " + match.Groups[3].Value);
+					server.writePart(string.Empty, Color.Cyan, true, false);
+					server.writePart("[" + match.Groups[1].Value + "] ", levelColor, false, false);
+					server.writePart(match.Groups[2].Value + " ", tagColor, false, false);
+					server.writePart(match.Groups[3].Value, msgColor, false, true);
 
 					// P.S. the format is [Info] [courtney.exampleplugin] Something interesting happened
 					// That was just an example
-
-					// Limiting output speed for Smod messages
-					Thread.Sleep(server.printSpeed);
 
 					// This return should be here
 					return;
 				}
 			}
-
 			if (stream.Contains("Server starting at all IPv4 addresses and port"))
 			{
 				string str = stream.Replace("Server starting at all IPv4 addresses and port ", string.Empty);
-				server.Port = ushort.Parse(str.Trim());
+				ushort port = 0;
+				if (ushort.TryParse(str.Trim(), out port))
+				{
+					server.Port = port;
+				}
 			}
-
-			if (stream.Contains("Mod Log:"))
+			else if (stream.Contains("Mod Log:"))
 			{
 				foreach (IEventAdminAction Event in server.adminaction)
 				{
 					Event.OnAdminAction(stream.Replace("Mod log:", string.Empty));
 				}
 			}
-
-			if (stream.Contains("ServerMod - Version"))
+			else if (stream.Contains("ServerMod - Version"))
 			{
+				string[] streamSplit;
 				server.HasServerMod = true;
 				// This should work fine with older ServerMod versions too
 				streamSplit = stream.Replace("ServerMod - Version", string.Empty).Split('-');
 				server.ServerModVersion = streamSplit[0].Trim();
 				server.ServerModBuild = (streamSplit.Length > 1 ? streamSplit[1] : "A").Trim();
 			}
-
-			if (server.ServerModCheck(1, 7, 2))
+			else if (stream.Contains("Round restarting"))
 			{
-				if (stream.Contains("Round restarting"))
+				foreach (IEventRoundEnd Event in server.roundend)
 				{
-					foreach (IEventRoundEnd Event in server.roundend)
-					{
-						Event.OnRoundEnd();
-					}
-				}
-
-				if (stream.Contains("Waiting for players"))
-				{
-					if (!server.InitialRoundStarted)
-					{
-						server.InitialRoundStarted = true;
-						foreach (IEventRoundStart Event in server.roundstart)
-						{
-							Event.OnRoundStart();
-						}
-					}
-
-					if (server.ServerModCheck(1, 5, 0) && server.fixBuggedPlayers)
-					{
-						server.SendMessage("ROUNDRESTART");
-						server.fixBuggedPlayers = false;
-					}
+					Event.OnRoundEnd();
 				}
 			}
-			else
+			else if (stream.Contains("Waiting for players"))
 			{
-				if (stream.Contains("Waiting for players"))
+				if (!server.InitialRoundStarted)
 				{
-					if (!server.InitialRoundStarted)
+					server.InitialRoundStarted = true;
+					foreach (IEventRoundStart Event in server.roundstart)
 					{
-						server.InitialRoundStarted = true;
-						foreach (IEventRoundStart Event in server.roundstart)
-						{
-							Event.OnRoundStart();
-						}
-					}
-					else
-					{
-						foreach (IEventRoundEnd Event in server.roundend)
-						{
-							Event.OnRoundEnd();
-						}
-					}
-
-					if (server.ServerModCheck(1, 5, 0) && server.fixBuggedPlayers)
-					{
-						server.SendMessage("ROUNDRESTART");
-						server.fixBuggedPlayers = false;
+						Event.OnRoundStart();
 					}
 				}
+				if (fixBuggedPlayers)
+				{
+					server.SendMessage("ROUNDRESTART");
+					fixBuggedPlayers = false;
+				}
 			}
-
-
-			if (stream.Contains("New round has been started"))
+			else if (stream.Contains("New round has been started"))
 			{
 				foreach (IEventRoundStart Event in server.roundstart)
 				{
 					Event.OnRoundStart();
 				}
 			}
-
-			if (stream.Contains("Level loaded. Creating match..."))
+			else if (stream.Contains("Level loaded. Creating match..."))
 			{
 				foreach (IEventServerStart Event in server.serverstart)
 				{
 					Event.OnServerStart();
 				}
 			}
-
-
-			if (stream.Contains("Server full"))
+			else if (stream.Contains("Server full"))
 			{
 				foreach (IEventServerFull Event in server.serverfull)
 				{
 					Event.OnServerFull();
 				}
 			}
-
-
-			if (stream.Contains("Player connect"))
+			else if (stream.Contains("Player connect"))
 			{
 				display = false;
 				foreach (IEventPlayerConnect Event in server.playerconnect)
@@ -299,8 +249,7 @@ namespace MegaAdmin
 					Event.OnPlayerConnect(name);
 				}
 			}
-
-			if (stream.Contains("Player disconnect"))
+			else if (stream.Contains("Player disconnect"))
 			{
 				display = false;
 				foreach (IEventPlayerDisconnect Event in server.playerdisconnect)
@@ -309,20 +258,13 @@ namespace MegaAdmin
 					Event.OnPlayerDisconnect(name);
 				}
 			}
-
-			if (stream.Contains("Player has connected before load is complete"))
+			else if (stream.Contains("Player has connected before load is complete"))
 			{
-				if (server.ServerModCheck(1, 5, 0))
-				{
-					server.fixBuggedPlayers = true;
-				}
+				fixBuggedPlayers = true;
 			}
-
 			if (display)
 			{
-				server.write(stream.Trim(), color);
-
-				// Limiting output speed for generic message
+				server.write(stream, color);
 				Thread.Sleep(server.printSpeed);
 			}
 		}
