@@ -250,7 +250,7 @@ namespace MegaAdmin
 			}
 		}
 
-		public void SoftRestart()
+		private void SoftRestart()
 		{
 			write("Restarting server with a new Session ID...", Color.Yellow);
 			restarting = true;
@@ -260,7 +260,7 @@ namespace MegaAdmin
 			Program.WriteMenu(this);
 		}
 
-		public void HardRestart()
+		private void HardRestart()
 		{
 			restarting = true;
 			Stop();
@@ -331,7 +331,7 @@ namespace MegaAdmin
 			}
 		}
 
-		public void cmd()
+		private void cmd()
 		{
 			cmdlock = true;
 			Program.WriteInput(this);
@@ -415,29 +415,30 @@ namespace MegaAdmin
 
 		public void SendMessage(string message)
 		{
-			string sessionDirectory = "SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID;
-			if (!Directory.Exists(sessionDirectory))
+			lock (this)
 			{
-				this.write("Send Message error: sending " + message + " failed. " + sessionDirectory + " does not exist!", Color.Yellow);
-				this.write("skipping", Color.Yellow);
-				return;
-			}
-			string file = sessionDirectory + Path.DirectorySeparatorChar + "cs" + logID + ".mapi";
-			if (File.Exists(file))
-			{
-				this.write("Send Message error: sending " + message + " failed. " + file + " already exists!", Color.Yellow);
-				this.write("skipping", Color.Yellow);
+				string sessionDirectory = "SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID;
+				if (!Directory.Exists(sessionDirectory))
+				{
+					write("Send Message error: sending " + message + " failed. " + sessionDirectory + " does not exist!", Color.Yellow);
+					write("skipping", Color.Yellow);
+					return;
+				}
+				string file = sessionDirectory + Path.DirectorySeparatorChar + "cs" + logID + ".mapi";
+				if (File.Exists(file))
+				{
+					write("Send Message error: sending " + message + " failed. " + file + " already exists!", Color.Yellow);
+					write("skipping", Color.Yellow);
+					logID++;
+					return;
+				}
+				write("Sending request to SCP: Secret Laboratory...", Color.Yellow);
+				File.AppendAllText(file, message + "terminator");
 				logID++;
-				return;
 			}
-			this.write("Sending request to SCP: Secret Laboratory...", Color.Yellow);
-			StreamWriter streamWriter = new StreamWriter(file);
-			logID++;
-			streamWriter.WriteLine(message + "terminator");
-			streamWriter.Close();
 		}
 
-		public static string Timestamp(string message)
+		private static string Timestamp(string message)
 		{
 			if (string.IsNullOrEmpty(message))
 				return string.Empty;
@@ -446,7 +447,7 @@ namespace MegaAdmin
 			return message;
 		}
 
-		public void Reload()
+		private void Reload()
 		{
 			Config = new YamlConfig("MeA_config.yaml");
 			nolog = Config.GetBool("nolog",true);
@@ -492,8 +493,6 @@ namespace MegaAdmin
 
 		private void OnMapiCreated(object sender, FileSystemEventArgs e)
 		{
-			if (!File.Exists(e.FullPath)) return;
-
 			try
 			{
 				ProcessFile(e.FullPath);
@@ -713,6 +712,7 @@ namespace MegaAdmin
 			{
 				write(stream, color);
 				//Thread.Sleep(printSpeed);
+				Thread.Sleep(100);
 			}
 		}
 	}
