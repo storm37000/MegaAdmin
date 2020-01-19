@@ -80,7 +80,8 @@ namespace MegaAdmin
 							{
 								if (key.Key == ConsoleKey.Backspace)
 								{
-									servers[selected].cmdbuffer = servers[selected].cmdbuffer.Remove(servers[selected].cmdbuffer.Length - 1);
+									if(servers[selected].cmdbuffer.Length > 0)
+										servers[selected].cmdbuffer = servers[selected].cmdbuffer.Remove(servers[selected].cmdbuffer.Length - 1);
 								}
 								else
 								{

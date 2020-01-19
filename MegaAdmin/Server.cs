@@ -90,7 +90,7 @@ namespace MegaAdmin
 			cmdlock = true;
 			Program.servers.Add(this);
 			Program.WriteMenu(this);
-			new Feature_Loader("MeA_features",this);
+			//new Feature_Loader("MeA_features",this);
 			Reload();
 			//printerThread = new Thread(new ThreadStart(() => new OutputThread(this)));
 			//printerThread.Name = "OutputThread";
@@ -152,17 +152,22 @@ namespace MegaAdmin
 			{
 				if (Program.RunningPlatform() != Program.Platform.Windows)
 				{
-					args = "-batchmode -nographics -nolog -key" + SID + " -silent-crashes -nodedicateddelete -id" + (object)Process.GetCurrentProcess().Id + " -logFile /dev/null";
+					args = "-batchmode -nographics -nolog -silent-crashes -nodedicateddelete -key" + SID + " -id" + Process.GetCurrentProcess().Id + " -logFile /dev/null -port 7777";
 				}
 				else
 				{
-					args = "-batchmode -nographics -nolog -key" + SID + " -silent-crashes -nodedicateddelete -id" + (object)Process.GetCurrentProcess().Id + " -logFile NUL";
+					args = "-batchmode -nographics -nolog -silent-crashes -nodedicateddelete -key" + SID + " -id" + Process.GetCurrentProcess().Id + " -logFile NUL";
 				}
 			}
 			else
 			{
-				args = "-batchmode -nographics -key" + SID + " -silent-crashes -nodedicateddelete -id" + (object)Process.GetCurrentProcess().Id + " -logFile \"" + LogFolder + "SCP_output_log.txt" + "\"";
+				args = "-batchmode -nographics -silent-crashes -nodedicateddelete -key" + SID + " -id" + Process.GetCurrentProcess().Id + " -logFile \"" + LogFolder + "SCP_output_log.txt" + "\"";
 			}
+			Directory.CreateDirectory("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID);
+			FileSystemWatcher watcher = new FileSystemWatcher("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID, "sl*.mapi");
+			watcher.IncludeSubdirectories = false;
+			watcher.Created += OnMapiCreated;
+			watcher.EnableRaisingEvents = true;
 			write("Starting server with the following parameters", Color.Yellow);
 			try
 			{
@@ -184,14 +189,6 @@ namespace MegaAdmin
 			{
 				Event.OnServerPreStart();
 			}
-			while (!Directory.Exists("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID))
-			{
-				//wait for directory to be created...
-			}
-			FileSystemWatcher watcher = new FileSystemWatcher("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID, "sl*.mapi");
-			watcher.IncludeSubdirectories = false;
-			watcher.Created += OnMapiCreated;
-			watcher.EnableRaisingEvents = true;
 			cmdlock = false;
 			Program.WriteInput(this);
 		}
@@ -203,9 +200,9 @@ namespace MegaAdmin
 				write("Stopping Server...", Color.Yellow);
 				SendMessage("quit");
 				while (!GameProcess.HasExited){}
-				DeleteSession();
 				write("Stopped Server", Color.Green);
 			}
+			DeleteSession();
 			if (!restarting)
 			{
 				Program.stopServer(this);
@@ -506,6 +503,31 @@ namespace MegaAdmin
 
 			string color = Color.Cyan;
 			bool display = true;
+
+			if (!string.IsNullOrEmpty(stream.Trim()))
+			{
+				if (stream.Contains("LOGTYPE"))
+				{
+					string type = stream.Substring(stream.IndexOf("LOGTYPE")).Trim();
+					stream = stream.Substring(0, stream.IndexOf("LOGTYPE")).Trim();
+
+					switch (type)
+					{
+						case "LOGTYPE02":
+							color = Color.Green;
+							break;
+						case "LOGTYPE-8":
+							color = Color.DarkRed;
+							break;
+						case "LOGTYPE14":
+							color = Color.Magenta;
+							break;
+						default:
+							color = Color.Cyan;
+							break;
+					}
+				}
+			}
 
 			if (stream.EndsWith(Environment.NewLine))
 				stream = stream.Substring(0, stream.Length - Environment.NewLine.Length);
