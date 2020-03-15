@@ -96,30 +96,7 @@ namespace MegaAdmin
 		{
 			return (value < min) ? min : (value > max) ? max : value;
 		}
-		private static readonly Random getrandom = new Random();
-		private static System.Text.Encoding enc8 = System.Text.Encoding.ASCII;
-		public static string GenerateSessionID()
-		{
-			byte[] buf = new byte[16];
-			for (byte i = 0; i < buf.Length; i++)
-			{
-				byte rnd = (byte)getrandom.Next(0, 3);
-				if (rnd == 0)
-				{
-					buf[i] = (byte)getrandom.Next(48, 58);
-				}
-				else if (rnd == 1)
-				{
-					buf[i] = (byte)getrandom.Next(65, 91);
-				}
-				else if (rnd == 2)
-
-				{
-					buf[i] = (byte)getrandom.Next(97, 123);
-				}
-			}
-			return enc8.GetString(buf);
-		}
+		
 		public static void startServer()
 		{
 			Thread server = new Thread(new ThreadStart(() => new Server()));
