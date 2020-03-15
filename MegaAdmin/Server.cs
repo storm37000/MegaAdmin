@@ -5,6 +5,8 @@ using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Drawing;
+using Pastel;
 
 namespace MegaAdmin
 {
@@ -78,6 +80,7 @@ namespace MegaAdmin
 		//public int printSpeed { get; private set; } = 150;
 		public bool DisableConfigValidation { get; private set; }
 		public bool ShareNonConfigs { get; private set; }
+		public Color defaultColor { get; private set; } = Color.Cyan;
 
 		//BEGIN EVENT LIST
 		public readonly List<IEventRoundEnd> roundend = new List<IEventRoundEnd>();
@@ -91,7 +94,8 @@ namespace MegaAdmin
 		public readonly List<IEventConfigReload> configreload = new List<IEventConfigReload>();
 		//END EVENT LIST
 
-		private static readonly Regex SmodRegex = new Regex(@"\[(DEBUG|INFO|WARN|ERROR)\] (\[.*?\]) (.*)", RegexOptions.Compiled | RegexOptions.Singleline);
+		private static readonly Regex SmodRegex = new Regex(@"\[(.*?)\] (\[.*?\]) (.*)", RegexOptions.Compiled | RegexOptions.Singleline);
+		private static readonly Regex VanillaRegex = new Regex(@"(\[.*?\]) (.*)", RegexOptions.Compiled | RegexOptions.Singleline);
 		private bool fixBuggedPlayers;
 		private FileSystemWatcher watcher;
 		public bool IsWatcherRunning
@@ -117,6 +121,8 @@ namespace MegaAdmin
 			//Feature_Loader("MeA_features", this);
 			Reload();
 			Start();
+			cmdlock = false;
+			Program.WriteInput(this);
 			// Wait if someone tells us to die or do something else.
 			do
 			{
@@ -167,8 +173,6 @@ namespace MegaAdmin
 			{
 				write("Failed - couldnt find server install!", Color.Red);
 				write("Please run the 'restart' command to try again...", Color.Gray);
-				cmdlock = false;
-				Program.WriteInput(this);
 				return;
 			}
 			string path = "SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID;
@@ -184,8 +188,6 @@ namespace MegaAdmin
 			{
 				write("Failed - couldnt find server executable file!", Color.Red);
 				write("Please run the 'restart' command to try again...", Color.Gray);
-				cmdlock = false;
-				Program.WriteInput(this);
 				return;
 			}
 			List<string> scpslArgs = new List<string>
@@ -234,8 +236,7 @@ namespace MegaAdmin
 			{
 				Event.OnServerPreStart();
 			}
-			cmdlock = false;
-			Program.WriteInput(this);
+			//if (cmdlock) { cmdlock = false; Program.WriteInput(this); }
 		}
 
 		private void GameProcess_Exited(object sender, EventArgs e)
@@ -270,7 +271,6 @@ namespace MegaAdmin
 			SendMessage("RECONNECTRS");
 			Stop();
 			Start();
-			Program.WriteMenu(this);
 		}
 
 		private void HardRestart()
@@ -278,7 +278,6 @@ namespace MegaAdmin
 			restarting = true;
 			Stop();
 			Start();
-			Program.WriteMenu(this);
 		}
 
 		private void CleanSession()
@@ -307,17 +306,24 @@ namespace MegaAdmin
 			if (Directory.Exists(path)) Directory.Delete(path);
 		}
 
-		public void write(string msg, string color)
+		public void write(string msg, Color? color = null)
 		{
 			lock (this)
 			{
-				string[] msgspl = Timestamp(msg).Split(new string[] { Environment.NewLine }, StringSplitOptions.None);
+				string[] msgspl = Timestamp(msg,true).Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
 				foreach (string mess in msgspl)
 				{
 					if (mess == Environment.NewLine) { continue; }
 					else
 					{
-						buffer.Add(color + mess.Substring(0, Program.ClampI(Console.BufferWidth - 1, 0, mess.Length)) + Color.Reset + Environment.NewLine);
+						if(color == null)
+						{
+							buffer.Add(mess.Substring(0, Program.ClampI(Console.BufferWidth - 1, 0, mess.Length)));
+						}
+						else
+						{
+							buffer.Add(mess.Substring(0, Program.ClampI(Console.BufferWidth - 1, 0, mess.Length)).Pastel(color.GetValueOrDefault()));
+						}
 						Program.WriteBuffer(this);
 					}
 				}
@@ -325,34 +331,10 @@ namespace MegaAdmin
 			}
 		}
 
-		public void writePart(string msg, string color, bool date = false, bool lineEnd = false)
-		{
-			lock (this)
-			{
-				string msgcol = color + msg + Color.Reset;
-				if (date)
-				{
-					buffer.Add(Timestamp(msgcol));
-					Program.WriteBuffer(this);
-				}
-				else if (lineEnd && !msg.EndsWith(Environment.NewLine))
-				{
-					buffer.Add(msgcol + Environment.NewLine);
-					Program.WriteBuffer(this);
-				}
-				else
-				{
-					buffer.Add(msgcol);
-					Program.WriteBuffer(this);
-				}
-				Log(msg, lineEnd);
-			}
-		}
-
 		private void cmd()
 		{
 			cmdlock = true;
-			Program.WriteInput(this);
+			Program.WriteMenu(this);
 			bool send = true;
 			string command = cmdbuffer;
 			this.write(">>> " + command, Color.DarkMagenta);
@@ -456,12 +438,19 @@ namespace MegaAdmin
 			}
 		}
 
-		private static string Timestamp(string message)
+		private static string Timestamp(string message, bool color = false)
 		{
 			if (string.IsNullOrEmpty(message))
 				return string.Empty;
 			DateTime now = DateTime.Now;
-			message = "[" + now.Hour.ToString("00") + ":" + now.Minute.ToString("00") + ":" + now.Second.ToString("00") + "] " + message;
+			if (color)
+			{
+				message = ("[" + now.Hour.ToString("00") + ":" + now.Minute.ToString("00") + ":" + now.Second.ToString("00") + "]").Pastel(Color.Cyan) + " " + message;
+			}
+			else
+			{
+				message = "[" + now.Hour.ToString("00") + ":" + now.Minute.ToString("00") + ":" + now.Second.ToString("00") + "] " + message;
+			}
 			return message;
 		}
 
@@ -472,41 +461,6 @@ namespace MegaAdmin
 			//printSpeed = Config.GetInt("print_speed");
 			DisableConfigValidation = Config.GetBool("disable_config_validation");
 			ShareNonConfigs = Config.GetBool("share_non_configs", true);
-		}
-
-		private bool ServerModCheck(int major, int minor, int fix)
-		{
-			if (ServerModVersion == null)
-			{
-				return false;
-			}
-
-			string[] parts = ServerModVersion.Split('.');
-			int verMajor = 0;
-			int verMinor = 0;
-			int verFix = 0;
-			if (parts.Length == 3)
-			{
-				Int32.TryParse(parts[0], out verMajor);
-				Int32.TryParse(parts[1], out verMinor);
-				Int32.TryParse(parts[2], out verFix);
-			}
-			else if (parts.Length == 2)
-			{
-				Int32.TryParse(parts[0], out verMajor);
-				Int32.TryParse(parts[1], out verMinor);
-			}
-			else
-			{
-				return false;
-			}
-
-			if (major == 0 && minor == 0 && verFix == 0)
-			{
-				return false;
-			}
-
-			return (verMajor > major) || (verMajor >= major && verMinor > minor) || (verMajor >= major && verMinor >= minor && verFix >= fix);
 		}
 
 		private void OnMapiCreated(object sender, FileSystemEventArgs e)
@@ -570,7 +524,7 @@ namespace MegaAdmin
 				return;
 			}
 
-			string color = Color.Cyan;
+			Color color = defaultColor;
 			bool display = true;
 
 			if (!string.IsNullOrEmpty(stream.Trim()))
@@ -592,7 +546,7 @@ namespace MegaAdmin
 							color = Color.Magenta;
 							break;
 						default:
-							color = Color.Cyan;
+							color = defaultColor;
 							break;
 					}
 				}
@@ -601,46 +555,68 @@ namespace MegaAdmin
 			if (stream.EndsWith(Environment.NewLine))
 				stream = stream.Substring(0, stream.Length - Environment.NewLine.Length);
 
-			// Smod2 loggers pretty printing
-			Match match = SmodRegex.Match(stream);
-			if (match.Success)
+			Match vmatch = VanillaRegex.Match(stream);
+			if (vmatch.Success)
 			{
-				if (match.Groups.Count >= 3)
+				if (vmatch.Groups.Count >= 2)
 				{
-					string levelColor = Color.Cyan;
-					string tagColor = Color.Yellow;
-					string msgColor = Color.White;
-					switch (match.Groups[1].Value.Trim())
+					Color tagColor = Color.Yellow;
+					Color msgColor = Color.Gray;
+					switch (vmatch.Groups[1].Value.Trim())
 					{
-						case "DEBUG":
-							levelColor = Color.Gray;
+						case "[DEBUG_MAPGEN]":
+							tagColor = Color.Gray;
 							break;
-						case "INFO":
-							levelColor = Color.Green;
-							break;
-						case "WARN":
-							levelColor = Color.DarkYellow;
-							break;
-						case "ERROR":
-							levelColor = Color.Red;
-							msgColor = Color.Red;
+						case "[DEBUG_VC]":
+							tagColor = Color.Gray;
 							break;
 						default:
 							break;
 					}
+					write(vmatch.Groups[1].Value.Pastel(tagColor) + " " + vmatch.Groups[2].Value.Pastel(msgColor));
+					return;
+				}
+			}
+			// Smod2 loggers pretty printing
+//			Match match = SmodRegex.Match(stream);
+//			if (match.Success)
+//			{
+//				if (match.Groups.Count >= 3)
+//				{
+//					string levelColor = Color.Cyan;
+//					string tagColor = Color.Yellow;
+//					string msgColor = Color.White;
+//					switch (match.Groups[1].Value.Trim())
+//					{
+//						case "DEBUG":
+//							levelColor = Color.Gray;
+//							break;
+//						case "INFO":
+//							levelColor = Color.Green;
+//							break;
+//						case "WARN":
+//							levelColor = Color.DarkYellow;
+//							break;
+//						case "ERROR":
+//							levelColor = Color.Red;
+//							msgColor = Color.Red;
+//							break;
+//						default:
+//							break;
+//					}
 
-					writePart(string.Empty, Color.Cyan, true, false);
-					writePart("[" + match.Groups[1].Value + "] ", levelColor, false, false);
-					writePart(match.Groups[2].Value + " ", tagColor, false, false);
-					writePart(match.Groups[3].Value, msgColor, false, true);
+//					writePart(string.Empty, Color.Cyan, true, false);
+//					writePart("[" + match.Groups[1].Value + "] ", levelColor, false, false);
+//					writePart(match.Groups[2].Value + " ", tagColor, false, false);
+//					writePart(match.Groups[3].Value, msgColor, false, true);
 
 					// P.S. the format is [Info] [courtney.exampleplugin] Something interesting happened
 					// That was just an example
 
 					// This return should be here
-					return;
-				}
-			}
+//					return;
+//				}
+//			}
 			if (stream.Contains("Mod Log:"))
 			{
 				foreach (IEventAdminAction Event in adminaction)
@@ -669,6 +645,7 @@ namespace MegaAdmin
 			}
 			else if (stream.Contains("Waiting for players"))
 			{
+				Program.WriteInput(this);
 				if (!InitialRoundStarted)
 				{
 					InitialRoundStarted = true;

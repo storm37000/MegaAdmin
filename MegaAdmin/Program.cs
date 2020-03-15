@@ -13,6 +13,8 @@ namespace MegaAdmin
 	}
 	class Program
 	{
+		public static readonly string version = "0.0";
+
 		public static byte selected { get; private set; } = 0;
 		private static byte offset = 0;
 		public static readonly List<Server> servers = new List<Server>();
@@ -22,7 +24,7 @@ namespace MegaAdmin
 
 		static void Main(string[] args)
 		{
-			//AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnProcessExit);
+			AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnProcessExit);
 			for (ushort x = 0; x < Console.WindowTop + Console.WindowHeight - 3; x++)
 			{
 				for (ushort i = 0; i < Console.WindowWidth-1; i++)
@@ -33,21 +35,11 @@ namespace MegaAdmin
 			}
 			windowresizewatcher.Name = "windowresizewatcher";
 			windowresizewatcher.Start();
-			//int lastbuffsize = 0;
 			startServer();
 			while (true)
 			{
-				
-				//if (lastbuffsize != servers[selected].buffer.Count)
-				//{
-				//	WriteBuffer();
-				//	lastbuffsize = servers[selected].buffer.Count;
-				//}
-				//System.Threading.Thread.Sleep(1);
-				//System.Threading.Thread.Sleep(100);
-				//if (Console.KeyAvailable)
-				//{
-					ConsoleKeyInfo key = Console.ReadKey(true);
+				ConsoleKeyInfo key = Console.ReadKey(true);
+				if (servers.Count == 0) { continue; }
 					switch (key.Key)
 					{
 						case ConsoleKey.LeftArrow:
@@ -192,7 +184,7 @@ namespace MegaAdmin
 			string str = string.Empty;
 			for (int i = 0 + buffoffset; i < ClampI(maxh+buffoffset, 0, servers[selected].buffer.Count); i++)
 			{
-				str = str + servers[selected].buffer[i];
+				str = str + servers[selected].buffer[i] + Environment.NewLine;
 			}
 			Console.SetCursorPosition(0, 0);
 			Console.Write(buffclear);
@@ -229,9 +221,10 @@ namespace MegaAdmin
 
 		static void OnProcessExit(object sender, EventArgs e)
 		{
-			for (byte i = (byte)servers.Count;i==1;i--)
+			foreach(Server srv in servers)
 			{
-				servers[i].Stop();
+				if (srv.IsGameProcessRunning)
+					srv.Stop();
 			}
 		}
 
