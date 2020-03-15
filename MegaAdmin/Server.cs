@@ -255,7 +255,10 @@ namespace MegaAdmin
 			string args = string.Join(" ", scpslArgs);
 			write("Starting server with the following parameters", Color.Yellow);
 			write(files[0] + " " + args, Color.Yellow);
-			GameProcess = Process.Start(new ProcessStartInfo(files[0], args));
+			GameProcess = Process.Start(new ProcessStartInfo(files[0], args){
+				CreateNoWindow = true,
+				UseShellExecute = false
+			});
 			GameProcess.Exited += GameProcess_Exited;
 			GameProcess.EnableRaisingEvents = true;
 			foreach (IEventServerPreStart Event in preserverstart)

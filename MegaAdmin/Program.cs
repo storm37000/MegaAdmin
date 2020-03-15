@@ -13,7 +13,7 @@ namespace MegaAdmin
 	}
 	class Program
 	{
-		public static readonly string version = "0.0";
+		public static readonly string version = "0.1";
 
 		public static byte selected { get; private set; } = 0;
 		private static byte offset = 0;
@@ -35,6 +35,7 @@ namespace MegaAdmin
 			}
 			windowresizewatcher.Name = "windowresizewatcher";
 			windowresizewatcher.Start();
+			Console.Title = "MegaAdmin v" + version;
 			startServer();
 			while (true)
 			{
