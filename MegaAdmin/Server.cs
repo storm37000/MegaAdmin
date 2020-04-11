@@ -17,7 +17,7 @@ namespace MegaAdmin
 		public readonly EventWaitHandle CMDevent = new EventWaitHandle(false, EventResetMode.AutoReset);
 		private uint logID;
 		public string SID { get; private set; } = string.Empty;
-		public ushort Port { get; private set; } = (ushort)(7777 + Program.servers.Count);
+		public ushort Port { get; private set; } = 0;
 		public List<string> buffer { get; private set; } = new List<string>();
 		public string cmdbuffer = string.Empty;
 		public bool cmdlock { get; private set; } = false;
@@ -77,7 +77,7 @@ namespace MegaAdmin
 		// set via config files
 		public bool nolog { get; private set; }
 		//public bool runOptimized { get; private set; } = true;
-		//public int printSpeed { get; private set; } = 150;
+		public int printSpeed { get; private set; }
 		public bool DisableConfigValidation { get; private set; }
 		public bool ShareNonConfigs { get; private set; }
 		public Color defaultColor { get; private set; } = Color.Cyan;
@@ -195,11 +195,15 @@ namespace MegaAdmin
 			stopping = false;
 			restarting = false;
 			SID = GenerateSessionID();
-			if (!Directory.Exists("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated"))
+			if (!Directory.Exists("SCPSL_Data"))
 			{
 				write("Failed - couldnt find server install!", Color.DarkRed);
 				write("Please run the 'restart' command to try again...", Color.Gray);
 				return;
+			}
+			if (!Directory.Exists("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated"))
+			{
+				Directory.CreateDirectory("SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated");
 			}
 			string path = "SCPSL_Data" + Path.DirectorySeparatorChar + "Dedicated" + Path.DirectorySeparatorChar + SID;
 			Directory.CreateDirectory(path);
@@ -338,7 +342,7 @@ namespace MegaAdmin
 		{
 			lock (this)
 			{
-				string[] msgspl = Timestamp(msg,true).Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+				string[] msgspl = Timestamp(msg,true).Split(new string[] { "/n" }, StringSplitOptions.RemoveEmptyEntries);
 				foreach (string mess in msgspl)
 				{
 					if (mess == Environment.NewLine) { continue; }
@@ -486,9 +490,13 @@ namespace MegaAdmin
 		{
 			Config = new YamlConfig("MeA_config.yaml");
 			nolog = Config.GetBool("nolog",true);
-			//printSpeed = Config.GetInt("print_speed");
+			printSpeed = Config.GetInt("print_speed",150);
 			DisableConfigValidation = Config.GetBool("disable_config_validation");
 			ShareNonConfigs = Config.GetBool("share_non_configs", true);
+			if(Port == 0)
+			{
+				Port = (ushort)(Config.GetInt("starting_port", 7777) + (Program.servers.Count-1));
+			}
 		}
 
 		private void OnMapiCreated(object sender, FileSystemEventArgs e)
@@ -730,8 +738,10 @@ namespace MegaAdmin
 			if (display)
 			{
 				write(stream, color);
-				//Thread.Sleep(printSpeed);
-				Thread.Sleep(100);
+				if(printSpeed != 0)
+				{
+					Thread.Sleep(printSpeed);
+				}
 			}
 		}
 	}
