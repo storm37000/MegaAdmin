@@ -8,16 +8,18 @@ namespace MegaAdmin
 	public class YamlConfig
 	{
 		public string[] RawData;
+		private string path;
 
 		public YamlConfig(string path)
 		{
+			this.path = path;
 			if (!File.Exists(path))
 			{
 				File.Create(path).Close();
 			}
 			if (File.Exists(path))
 			{
-				LoadConfigFile(path);
+				RawData = File.ReadAllLines(path, System.Text.Encoding.UTF8);
 			}
 			else
 			{
@@ -25,56 +27,61 @@ namespace MegaAdmin
 			}
 		}
 
-		public void LoadConfigFile(string path)
-		{
-			RawData = File.ReadAllLines(path, System.Text.Encoding.UTF8);
-		}
-
 		public string GetString(string key, string def = null)
 		{
-			foreach (var line in RawData)
+			foreach (string line in RawData)
 			{
-				if (line.ToLower().StartsWith(key.ToLower() + ": ")) return line.Substring(key.Length + 2);
+				if (line.ToLower().StartsWith(key.ToLower() + ": "))
+				{
+					if(line.Substring(key.Length + 2) == "default")
+					{
+						return def;
+					}
+					else
+					{
+						return line.Substring(key.Length + 2);
+					}
+				}
 			}
-
+			Array.Resize(ref RawData, RawData.Length + 1);
+			RawData[RawData.Length-1] = key + ": default";
+			File.WriteAllLines(path, RawData, System.Text.Encoding.UTF8);
 			return def;
 		}
 
 		public int GetInt(string key, int def = 0)
 		{
-			foreach (var line in RawData)
-			{
-				if (!line.ToLower().StartsWith(key.ToLower() + ": ")) continue;
-				try
-				{
-					return Convert.ToInt32(line.Substring(key.Length + 2));
-				}
-				catch
-				{
-					return 0;
-				}
-			}
-
+			int.TryParse(GetString(key, def.ToString()), out def);
 			return def;
 		}
 
-		public float GetFloat(string key, float def = 0)
+		public uint GetUInt(string key, uint def = 0)
 		{
-			var ky = GetString(key);
-			if (ky == string.Empty) return def;
-			ky = ky.Replace(',', '.');
-			return float.TryParse(ky, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out float result) ? result : def;
+			uint.TryParse(GetString(key, def.ToString()), out def);
+			return def;
+		}
+
+		public short GetShort(string key, short def = 0)
+		{
+			short.TryParse(GetString(key, def.ToString()), out def);
+			return def;
+		}
+
+		public ushort GetUShort(string key, ushort def = 0)
+		{
+			ushort.TryParse(GetString(key, def.ToString()), out def);
+			return def;
+		}
+
+		public float GetFloat(string key, float def = 0f)
+		{
+			float.TryParse(GetString(key, def.ToString()).Replace(',', '.'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out def);
+			return def;
 		}
 
 		public bool GetBool(string key, bool def = false)
 		{
-			foreach (var line in RawData)
-			{
-				if (!line.ToLower().StartsWith(key.ToLower() + ": ")) continue;
-				return line.Substring(key.Length + 2) == "true";
-			}
-
-			return def;
+			return GetString(key, def.ToString().ToLower()) == "true";
 		}
 
 		public List<string> GetStringList(string key)
@@ -103,9 +110,9 @@ namespace MegaAdmin
 
 		public Dictionary<string, string> GetStringDictionary(string key)
 		{
-			var list = GetStringList(key);
-			var dict = new Dictionary<string, string>();
-			foreach (var item in list)
+			//var list = GetStringList(key);
+			Dictionary< string,string> dict = new Dictionary<string, string>();
+			foreach (string item in RawData)
 			{
 				var i = item.IndexOf(": ", StringComparison.Ordinal);
 				dict.Add(item.Substring(0, i), item.Substring(i + 2));

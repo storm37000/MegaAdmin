@@ -77,7 +77,7 @@ namespace MegaAdmin
 		// set via config files
 		public bool nolog { get; private set; }
 		//public bool runOptimized { get; private set; } = true;
-		public int printSpeed { get; private set; }
+		public uint printSpeed { get; private set; }
 		public bool DisableConfigValidation { get; private set; }
 		public bool ShareNonConfigs { get; private set; }
 		public Color defaultColor { get; private set; } = Color.Cyan;
@@ -490,12 +490,13 @@ namespace MegaAdmin
 		{
 			Config = new YamlConfig("MeA_config.yaml");
 			nolog = Config.GetBool("nolog",true);
-			printSpeed = Config.GetInt("print_speed",150);
+			printSpeed = Config.GetUInt("print_speed",150);
 			DisableConfigValidation = Config.GetBool("disable_config_validation");
 			ShareNonConfigs = Config.GetBool("share_non_configs", true);
 			if(Port == 0)
 			{
-				Port = (ushort)(Config.GetInt("starting_port", 7777) + (Program.servers.Count-1));
+				Port = Config.GetUShort("starting_port", 7777);
+				Port += (ushort)(Program.servers.Count - 1);
 			}
 		}
 
@@ -740,7 +741,7 @@ namespace MegaAdmin
 				write(stream, color);
 				if(printSpeed != 0)
 				{
-					Thread.Sleep(printSpeed);
+					Thread.Sleep((int)printSpeed);
 				}
 			}
 		}
